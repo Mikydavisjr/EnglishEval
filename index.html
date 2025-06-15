@@ -1,0 +1,177 @@
+<!-- DUMMY VERSION WITH RELIABLE COMPATIBILITY CHECK -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speaking Evaluation Demo</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    button { padding: 10px 20px; margin-top: 10px; }
+    .box { margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 10px; }
+    canvas { margin-top: 20px; width: 100%; height: 300px; }
+  </style>
+</head>
+<body>
+  <h1>🎤 English Speaking Evaluation (Demo)</h1>
+
+  <div class="box">
+    <strong>Question:</strong>
+    <p id="question">What kind of job do you want in the future, and why?</p>
+    <button id="speakButton">🎙️ Speak</button>
+    <button onclick="exportCSV()">⬇️ Export CSV</button>
+    <p><em id="status">Click the button and start speaking...</em></p>
+  </div>
+
+  <div class="box">
+    <strong>Your Answer:</strong>
+    <p id="transcript">(waiting for input...)</p>
+  </div>
+
+  <div class="box">
+    <strong>Evaluation:</strong>
+    <ul id="evaluation">
+      <li>TOEIC Score: —</li>
+      <li>Pronunciation: —</li>
+      <li>Grammar: —</li>
+      <li>Fluency: —</li>
+      <li>Advice: —</li>
+    </ul>
+  </div>
+
+  <div class="box">
+    <strong>Score History (TOEIC)</strong>
+    <canvas id="scoreChart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const transcriptEl = document.getElementById("transcript");
+    const statusEl = document.getElementById("status");
+    const evaluationEl = document.getElementById("evaluation");
+    const speakButton = document.getElementById("speakButton");
+    const historyKey = "speakingHistory";
+
+    async function evaluateAnswer(text) {
+      return {
+        TOEIC_score: Math.floor(140 + Math.random() * 40),
+        Pronunciation: "★★★★☆",
+        Grammar: "〇",
+        Fluency: "Good rhythm, a few pauses.",
+        Advice: "Try to avoid repeating ideas and use more specific examples."
+      };
+    }
+
+    function saveToHistory(text, evaluation) {
+      const history = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      const record = {
+        timestamp: new Date().toISOString(),
+        response: text,
+        evaluation: evaluation
+      };
+      history.push(record);
+      localStorage.setItem(historyKey, JSON.stringify(history));
+      updateChart(history);
+    }
+
+    function loadHistory() {
+      const history = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      updateChart(history);
+    }
+
+    function updateChart(history) {
+      const labels = history.map(h => new Date(h.timestamp).toLocaleDateString());
+      const scores = history.map(h => h.evaluation.TOEIC_score);
+      const ctx = document.getElementById("scoreChart").getContext("2d");
+      if (window.scoreChart) window.scoreChart.destroy();
+      window.scoreChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "TOEIC Score",
+            data: scores,
+            fill: false,
+            borderColor: "#3e95cd",
+            tension: 0.1
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: false,
+              suggestedMin: 100,
+              suggestedMax: 200
+            }
+          }
+        }
+      });
+    }
+
+    function exportCSV() {
+      const history = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      let csv = "Timestamp,Response,TOEIC Score,Pronunciation,Grammar,Fluency,Advice\n";
+      history.forEach(h => {
+        const e = h.evaluation;
+        csv += `"${h.timestamp}","${h.response}","${e.TOEIC_score}","${e.Pronunciation}","${e.Grammar}","${e.Fluency}","${e.Advice}"\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "speaking_history.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function startRecording() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("❌ Your browser does not support Speech Recognition. Please use Chrome on desktop.");
+        console.error("SpeechRecognition not supported");
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.start();
+      statusEl.textContent = "🎙️ Listening...";
+      console.log("Speech recognition started...");
+
+      recognition.onresult = async (event) => {
+        const result = event.results[0][0].transcript;
+        console.log("Recognized:", result);
+        transcriptEl.textContent = result;
+        statusEl.textContent = "✅ Evaluating...";
+
+        const evaluation = await evaluateAnswer(result);
+
+        evaluationEl.innerHTML = `
+          <li>TOEIC Score: ${evaluation.TOEIC_score}</li>
+          <li>Pronunciation: ${evaluation.Pronunciation}</li>
+          <li>Grammar: ${evaluation.Grammar}</li>
+          <li>Fluency: ${evaluation.Fluency}</li>
+          <li>Advice: ${evaluation.Advice}</li>
+        `;
+
+        saveToHistory(result, evaluation);
+        statusEl.textContent = "✅ Done.";
+      };
+
+      recognition.onerror = (err) => {
+        statusEl.textContent = "❌ Error: " + err.message;
+        console.error("Speech recognition error:", err);
+      };
+    }
+
+    window.onload = () => {
+      loadHistory();
+      speakButton.addEventListener("click", startRecording);
+    };
+  </script>
+</body>
+</html>
