@@ -1,9 +1,9 @@
-<!-- DUMMY VERSION WITH RELIABLE COMPATIBILITY CHECK -->
+<!-- FINAL DEBUG-READY VERSION -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Speaking Evaluation Demo</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
@@ -18,9 +18,11 @@
   <div class="box">
     <strong>Question:</strong>
     <p id="question">What kind of job do you want in the future, and why?</p>
-    <button id="speakButton">🎙️ Speak</button>
+    <button id="readButton">🔊 Read Aloud</button>
+    <button id="startButton">🔴 Start Recording</button>
+    <button id="stopButton" disabled>⏹ Stop Recording</button>
     <button onclick="exportCSV()">⬇️ Export CSV</button>
-    <p><em id="status">Click the button and start speaking...</em></p>
+    <p><em id="status">Click 'Start' and begin speaking. When you're done, click 'Stop'.</em></p>
   </div>
 
   <div class="box">
@@ -46,11 +48,82 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
+    let recognition;
     const transcriptEl = document.getElementById("transcript");
     const statusEl = document.getElementById("status");
     const evaluationEl = document.getElementById("evaluation");
-    const speakButton = document.getElementById("speakButton");
+    const startButton = document.getElementById("startButton");
+    const stopButton = document.getElementById("stopButton");
+    const readButton = document.getElementById("readButton");
+    const questionText = document.getElementById("question").textContent;
     const historyKey = "speakingHistory";
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initRecognition();
+      loadHistory();
+    });
+
+    readButton.addEventListener("click", () => {
+      const utterance = new SpeechSynthesisUtterance(questionText);
+      utterance.lang = 'en-US';
+      window.speechSynthesis.speak(utterance);
+    });
+
+    startButton.onclick = () => {
+      recognition.start();
+      startButton.disabled = true;
+      stopButton.disabled = false;
+    };
+
+    stopButton.onclick = () => {
+      recognition.stop();
+    };
+
+    function initRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("❌ Your browser does not support Speech Recognition. Please use Chrome on desktop.");
+        return;
+      }
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        statusEl.textContent = "🎙️ Listening...";
+      };
+
+      recognition.onresult = async (event) => {
+        const result = event.results[0][0].transcript;
+        transcriptEl.textContent = result;
+        statusEl.textContent = "✅ Evaluating...";
+
+        const evaluation = await evaluateAnswer(result);
+        evaluationEl.innerHTML = `
+          <li>TOEIC Score: ${evaluation.TOEIC_score}</li>
+          <li>Pronunciation: ${evaluation.Pronunciation}</li>
+          <li>Grammar: ${evaluation.Grammar}</li>
+          <li>Fluency: ${evaluation.Fluency}</li>
+          <li>Advice: ${evaluation.Advice}</li>
+        `;
+        saveToHistory(result, evaluation);
+        statusEl.textContent = "✅ Done.";
+        stopButton.disabled = true;
+        startButton.disabled = false;
+      };
+
+      recognition.onerror = (err) => {
+        statusEl.textContent = "❌ Error: " + err.message;
+        stopButton.disabled = true;
+        startButton.disabled = false;
+      };
+
+      recognition.onend = () => {
+        stopButton.disabled = true;
+        startButton.disabled = false;
+      };
+    }
 
     async function evaluateAnswer(text) {
       return {
@@ -124,54 +197,6 @@
       a.click();
       document.body.removeChild(a);
     }
-
-    function startRecording() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        alert("❌ Your browser does not support Speech Recognition. Please use Chrome on desktop.");
-        console.error("SpeechRecognition not supported");
-        return;
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-US";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.start();
-      statusEl.textContent = "🎙️ Listening...";
-      console.log("Speech recognition started...");
-
-      recognition.onresult = async (event) => {
-        const result = event.results[0][0].transcript;
-        console.log("Recognized:", result);
-        transcriptEl.textContent = result;
-        statusEl.textContent = "✅ Evaluating...";
-
-        const evaluation = await evaluateAnswer(result);
-
-        evaluationEl.innerHTML = `
-          <li>TOEIC Score: ${evaluation.TOEIC_score}</li>
-          <li>Pronunciation: ${evaluation.Pronunciation}</li>
-          <li>Grammar: ${evaluation.Grammar}</li>
-          <li>Fluency: ${evaluation.Fluency}</li>
-          <li>Advice: ${evaluation.Advice}</li>
-        `;
-
-        saveToHistory(result, evaluation);
-        statusEl.textContent = "✅ Done.";
-      };
-
-      recognition.onerror = (err) => {
-        statusEl.textContent = "❌ Error: " + err.message;
-        console.error("Speech recognition error:", err);
-      };
-    }
-
-    window.onload = () => {
-      loadHistory();
-      speakButton.addEventListener("click", startRecording);
-    };
   </script>
 </body>
 </html>
