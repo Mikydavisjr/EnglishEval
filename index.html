@@ -1,4 +1,4 @@
-<!-- FINAL DEBUG-READY VERSION -->
+<!-- IMPROVED VERSION: Add playback with compatible MIME type -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,6 +28,7 @@
   <div class="box">
     <strong>Your Answer:</strong>
     <p id="transcript">(waiting for input...)</p>
+    <audio id="playback" controls style="display:none;" type="audio/webm"></audio>
   </div>
 
   <div class="box">
@@ -48,7 +49,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    let recognition;
+    let recognition, mediaRecorder, audioChunks = [];
     const transcriptEl = document.getElementById("transcript");
     const statusEl = document.getElementById("status");
     const evaluationEl = document.getElementById("evaluation");
@@ -56,6 +57,7 @@
     const stopButton = document.getElementById("stopButton");
     const readButton = document.getElementById("readButton");
     const questionText = document.getElementById("question").textContent;
+    const playback = document.getElementById("playback");
     const historyKey = "speakingHistory";
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -64,19 +66,41 @@
     });
 
     readButton.addEventListener("click", () => {
+      const synth = window.speechSynthesis;
+      if (!synth) {
+        alert("❌ Speech synthesis not supported.");
+        return;
+      }
       const utterance = new SpeechSynthesisUtterance(questionText);
       utterance.lang = 'en-US';
-      window.speechSynthesis.speak(utterance);
+      synth.cancel();
+      synth.speak(utterance);
     });
 
-    startButton.onclick = () => {
-      recognition.start();
+    startButton.onclick = async () => {
+      if (recognition) recognition.start();
       startButton.disabled = true;
       stopButton.disabled = false;
+      transcriptEl.textContent = "(listening...)";
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      audioChunks = [];
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const audioURL = URL.createObjectURL(audioBlob);
+        playback.src = audioURL;
+        playback.style.display = 'block';
+      };
+      mediaRecorder.start();
     };
 
     stopButton.onclick = () => {
-      recognition.stop();
+      if (recognition) recognition.stop();
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     };
 
     function initRecognition() {
@@ -89,13 +113,14 @@
       recognition.lang = "en-US";
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
+      recognition.continuous = true;
 
       recognition.onstart = () => {
         statusEl.textContent = "🎙️ Listening...";
       };
 
       recognition.onresult = async (event) => {
-        const result = event.results[0][0].transcript;
+        const result = event.results[event.results.length - 1][0].transcript;
         transcriptEl.textContent = result;
         statusEl.textContent = "✅ Evaluating...";
 
@@ -183,10 +208,12 @@
 
     function exportCSV() {
       const history = JSON.parse(localStorage.getItem(historyKey) || "[]");
-      let csv = "Timestamp,Response,TOEIC Score,Pronunciation,Grammar,Fluency,Advice\n";
+      let csv = "Timestamp,Response,TOEIC Score,Pronunciation,Grammar,Fluency,Advice
+";
       history.forEach(h => {
         const e = h.evaluation;
-        csv += `"${h.timestamp}","${h.response}","${e.TOEIC_score}","${e.Pronunciation}","${e.Grammar}","${e.Fluency}","${e.Advice}"\n`;
+        csv += `"${h.timestamp}","${h.response}","${e.TOEIC_score}","${e.Pronunciation}","${e.Grammar}","${e.Fluency}","${e.Advice}"
+`;
       });
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
